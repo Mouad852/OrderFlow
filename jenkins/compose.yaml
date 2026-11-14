@@ -21,6 +21,9 @@ services:
       JENKINS_AGENT_NAME: orderflow-local-agent
       JENKINS_SECRET: ${JENKINS_AGENT_SECRET}
       JENKINS_AGENT_WORKDIR: /home/jenkins/agent
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     user: "0:0"
     volumes:
