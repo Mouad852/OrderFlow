@@ -1,0 +1,63 @@
+pipeline {
+    agent {
+        label 'orderflow'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        UV_LINK_MODE = 'copy'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Verify lockfile') {
+            steps {
+                sh 'uv lock --check'
+                sh 'uv sync --frozen'
+            }
+        }
+
+        stage('Format and lint') {
+            steps {
+                sh 'uv run ruff format --check .'
+                sh 'uv run ruff check .'
+            }
+        }
+
+        stage('Unit tests') {
+            steps {
+                sh 'uv run pytest tests/unit -q'
+            }
+        }
+
+        stage('Build API image') {
+            steps {
+                sh '''
+                    image_tag="$(git rev-parse HEAD)"
+                    docker build \
+                      --file docker/Dockerfile.api \
+                      --tag "orderflow-api:${image_tag}" \
+                      .
+                    docker image inspect "orderflow-api:${image_tag}"
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'junit.xml'
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'coverage.xml'
+        }
+    }
+}
