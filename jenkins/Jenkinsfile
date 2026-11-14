@@ -58,6 +58,25 @@ pipeline {
                 '''
             }
         }
+
+        stage('Scan API image') {
+            steps {
+                sh '''
+                    image_tag="$(git rev-parse HEAD)"
+
+                    docker run --rm \
+                        --security-opt no-new-privileges \
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v trivy-cache:/root/.cache \
+                        aquasec/trivy:0.76.0 image \
+                            --scanners vuln \
+                            --exit-code 1 \
+                            --severity CRITICAL,HIGH \
+                            --ignore-unfixed \
+                            "orderflow-api:${image_tag}"
+                '''
+            }
+        }
     }
 
     post {
