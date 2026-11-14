@@ -1,0 +1,30 @@
+name: orderflow-jenkins
+
+services:
+  controller:
+    image: jenkins/jenkins:2.590-jdk21@sha256:1b8068fd8b82518be3bb2e89560efa44f67f5fbc1ab3a9b59826c7f8f70f2260
+    ports:
+      - "127.0.0.1:8081:8080"
+    restart: unless-stopped
+    volumes:
+      - jenkins_home:/var/jenkins_home
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    depends_on:
+      controller:
+        condition: service_started
+    environment:
+      JENKINS_URL: http://controller:8080/
+      JENKINS_AGENT_NAME: orderflow-local-agent
+      JENKINS_SECRET: ${JENKINS_AGENT_SECRET}
+      JENKINS_AGENT_WORKDIR: /home/jenkins/agent
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins_home:
