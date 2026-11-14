@@ -40,6 +40,12 @@ pipeline {
             }
         }
 
+        stage('PostgreSQL integration tests'){
+            steps {
+                sh 'uv run pytest tests/integration -q'
+            }
+        }
+
         stage('Build API image') {
             steps {
                 sh '''
