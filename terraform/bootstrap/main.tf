@@ -1,4 +1,13 @@
 terraform {
+    backend "azurerm" {
+        resource_group_name  = "rg-orderflow-tfstate-neu"
+        storage_account_name = "storderflowtfstategjkoua"
+        container_name       = "tfstate"
+        key                  = "bootstrap.tfstate"
+        use_cli              = true
+        use_azuread_auth     = true
+    }
+
     required_version = "~> 1.16"
     required_providers {
         azurerm = {
