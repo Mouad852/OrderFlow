@@ -1,0 +1,42 @@
+[project]
+name = "orderflow"
+version = "0.1.0"
+description = "A reproducible order-service DevSecOps platform."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic>=1.14,<2",
+  "fastapi>=0.115,<1",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic-settings>=2.6,<3",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[dependency-groups]
+dev = [
+  "httpx2>=2,<3",
+  "pytest>=8,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.8,<1",
+  "testcontainers[postgres]>=4.8,<5",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers --cov=app --cov-report=term-missing --cov-report=xml --junitxml=junit.xml --cov-fail-under=80"
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

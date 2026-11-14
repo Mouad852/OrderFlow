@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+junit.xml
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.azure/
+
+# Terraform: state and local variable values
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+
+# Local Jenkins data and logs
+jenkins_home/
+*.log
+
+# Operating-system files
+.DS_Store
+Thumbs.db
