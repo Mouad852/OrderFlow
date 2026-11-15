@@ -11,7 +11,23 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        jq \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl --fail --location --silent --show-error \
+        https://aka.ms/InstallAzureCLIDeb \
+        --output /tmp/install-azure-cli.sh \
+    && bash /tmp/install-azure-cli.sh \
+    && rm -f /tmp/install-azure-cli.sh \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV AZURE_EXTENSION_DIR=/opt/az/extensions
+
+RUN mkdir -p "${AZURE_EXTENSION_DIR}" \
+    && az extension add \
+        --name containerapp \
+        --upgrade \
+    && chmod -R a+rX "${AZURE_EXTENSION_DIR}"
 
 RUN curl --fail --location --silent --show-error \
     https://astral.sh/uv/0.13.6/install.sh \
