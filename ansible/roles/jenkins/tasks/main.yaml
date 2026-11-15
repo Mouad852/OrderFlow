@@ -26,6 +26,62 @@
       - docker
     append: true
 
+- name: Read Docker group information
+  ansible.builtin.command:
+    argv:
+      - getent
+      - group
+      - docker
+  register: docker_group
+  changed_when: false
+  check_mode: false
+
+- name: Record Docker group ID
+  ansible.builtin.set_fact:
+    jenkins_docker_group_gid: "{{ docker_group.stdout.split(':')[2] }}"
+
+- name: Create agent image directory
+  ansible.builtin.file:
+    path: "{{ jenkins_agent_build_context }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check for existing agent secret
+  ansible.builtin.stat:
+    path: "{{ jenkins_agent_env_path }}"
+  register: jenkins_agent_env_file
+
+- name: Require agent secret during initial configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        jenkins_agent_secret | length > 0
+        or jenkins_agent_env_file.stat.exists
+    fail_msg: >-
+      Export JENKINS_AGENT_SECRET before configuring the agent for the first time.
+
+- name: Manage agent secret
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: "{{ jenkins_agent_env_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: jenkins_agent_secret | length > 0
+  no_log: true
+  notify: Apply Jenkins stack
+
+- name: Manage Jenkins agent image
+  ansible.builtin.template:
+    src: Dockerfile.agent.j2
+    dest: "{{ jenkins_agent_build_context }}/Dockerfile"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Apply Jenkins stack
+
 - name: Manage Caddy configuration
   ansible.builtin.template:
     src: Caddyfile.j2
@@ -66,7 +122,8 @@
   ansible.builtin.assert:
     that:
       - "'controller' in jenkins_running_services.stdout_lines"
+      - "'agent' in jenkins_running_services.stdout_lines"
       - "'caddy' in jenkins_running_services.stdout_lines"
-    fail_msg: Jenkins controller or Caddy is not running
-    success_msg: Jenkins controller and Caddy are running
+    fail_msg: Jenkins controller, agent or Caddy is not running
+    success_msg: Jenkins controller, agent and Caddy are running
   when: not ansible_check_mode

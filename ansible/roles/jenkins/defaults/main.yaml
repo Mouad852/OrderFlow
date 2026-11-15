@@ -7,5 +7,17 @@ jenkins_image: >-
 caddy_image: >-
   caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
 
+jenkins_agent_base_image: jenkins/inbound-agent:3395.v6e5377b_0fb_3c-5-jdk21
+
+jenkins_docker_cli_image: >-
+  docker:29.4.0-cli@sha256:bb21349a52c00b206ad8b5c03fa52023c741c4cf11f269d40d40b9ebaac73d96
+
+jenkins_agent_image: orderflow-jenkins-agent:local
+jenkins_agent_name: orderflow-azure-agent
+jenkins_agent_workdir: /home/jenkins/agent
+jenkins_agent_build_context: /etc/orderflow-jenkins-agent
+jenkins_agent_env_path: /etc/orderflow-jenkins-agent.env
+jenkins_agent_secret: "{{ lookup('ansible.builtin.env', 'JENKINS_AGENT_SECRET') }}"
+
 jenkins_compose_path: /etc/orderflow-jenkins-compose.yaml
 jenkins_caddyfile_path: /etc/orderflow-jenkins-Caddyfile

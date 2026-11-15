@@ -8,6 +8,6 @@
       - "{{ jenkins_compose_path }}"
       - up
       - --detach
+      - --build
       - --remove-orphans
-  register: jenkins_compose_result
   changed_when: true

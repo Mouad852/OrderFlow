@@ -9,6 +9,35 @@ services:
     volumes:
       - jenkins_home:/var/jenkins_home
 
+  agent:
+    build:
+      context: {{ jenkins_agent_build_context }}
+      dockerfile: Dockerfile
+    image: {{ jenkins_agent_image }}
+    depends_on:
+      controller:
+        condition: service_started
+    env_file:
+      - {{ jenkins_agent_env_path }}
+    command:
+      - -url
+      - http://controller:8080/
+      - -name
+      - {{ jenkins_agent_name }}
+      - -workDir
+      - {{ jenkins_agent_workdir }}
+      - -webSocket
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    group_add:
+      - "{{ jenkins_docker_group_gid }}"
+    init: true
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   caddy:
     image: {{ caddy_image }}
     depends_on:
