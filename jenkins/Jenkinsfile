@@ -20,6 +20,10 @@ pipeline {
         ACR_LOGIN_SERVER      = 'acrorderflowmouadswe.azurecr.io'
         CONTAINER_APP_NAME    = 'ca-orderflow-api-staging-swe'
         MIGRATION_JOB_NAME    = 'caj-orderflow-migrate-swe'
+
+        PRODUCTION_RESOURCE_GROUP    = 'rg-orderflow-production-swe'
+        PRODUCTION_CONTAINER_APP     = 'ca-orderflow-api-production-swe'
+        PRODUCTION_MIGRATION_JOB     = 'caj-orderflow-migrate-prod-swe'
     }
 
     stages {
@@ -136,6 +140,37 @@ pipeline {
             }
         }
 
+        stage('Resolve published image digest') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                script {
+                    env.API_IMAGE_DIGEST = sh(
+                        script: '''
+                            az acr manifest show-metadata \
+                                --registry "${ACR_NAME}" \
+                                --name "orderflow-api:${IMAGE_TAG}" \
+                                --query digest \
+                                --output tsv \
+                                --only-show-errors
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    if (!(env.API_IMAGE_DIGEST ==~ /^sha256:[0-9a-f]{64}$/)) {
+                        error("Azure returned an invalid image digest: ${env.API_IMAGE_DIGEST}")
+                    }
+
+                    env.API_IMAGE_BY_DIGEST = "${env.ACR_LOGIN_SERVER}/orderflow-api@${env.API_IMAGE_DIGEST}"
+                    env.REVISION_SUFFIX = env.IMAGE_TAG.substring(0, 12)
+
+                    echo "Immutable API image: ${env.API_IMAGE_BY_DIGEST}"
+                }
+            }
+        }
+
         stage('Run staging migrations') {
             when {
                 branch 'main'
@@ -147,7 +182,7 @@ pipeline {
                         --name "${MIGRATION_JOB_NAME}" \
                         --resource-group "${AZURE_RESOURCE_GROUP}" \
                         --container-name migrate \
-                        --image "${API_IMAGE}" \
+                        --image "${API_IMAGE_BY_DIGEST}" \
                         --output none \
                         --only-show-errors
 
@@ -217,7 +252,7 @@ pipeline {
                     az containerapp update \
                       --name "${CONTAINER_APP_NAME}" \
                       --resource-group "${AZURE_RESOURCE_GROUP}" \
-                      --image "${API_IMAGE}" \
+                      --image "${API_IMAGE_BY_DIGEST}" \
                       --output none \
                       --only-show-errors
                 '''
@@ -258,6 +293,288 @@ pipeline {
                       "${api_url}/health"
 
                     bash scripts/smoke-test.sh "${api_url}"
+                '''
+            }
+        }
+
+        stage('Approve production') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                timeout(time: 24, unit: 'HOURS') {
+                    input(
+                        message: "Promote ${env.API_IMAGE_BY_DIGEST} to production?",
+                        ok: 'Promote'
+                    )
+                }
+            }
+        }
+
+        stage('Run production migrations') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    az containerapp job update \
+                        --name "${PRODUCTION_MIGRATION_JOB}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --container-name migrate \
+                        --image "${API_IMAGE_BY_DIGEST}" \
+                        --output none \
+                        --only-show-errors
+
+                    execution_name="$(
+                        az containerapp job start \
+                            --name "${PRODUCTION_MIGRATION_JOB}" \
+                            --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                            --query name \
+                            --output tsv \
+                            --only-show-errors
+                    )"
+
+                    if [ -z "${execution_name}" ] || [ "${execution_name}" = "null" ]; then
+                      echo "Azure did not return a production migration execution name"
+                      exit 1
+                    fi
+
+                    echo "Production migration execution: ${execution_name}"
+
+                    attempt=1
+
+                    while [ "${attempt}" -le 90 ]; do
+                      status="$(
+                        az containerapp job execution show \
+                          --name "${PRODUCTION_MIGRATION_JOB}" \
+                          --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                          --job-execution-name "${execution_name}" \
+                          --query properties.status \
+                          --output tsv \
+                          --only-show-errors
+                      )"
+
+                      echo "Production migration status: ${status}"
+
+                      case "${status}" in
+                        Succeeded)
+                          exit 0
+                          ;;
+                        Failed|Degraded|Stopped)
+                          az containerapp job execution show \
+                            --name "${PRODUCTION_MIGRATION_JOB}" \
+                            --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                            --job-execution-name "${execution_name}" \
+                            --output json
+
+                          exit 1
+                          ;;
+                      esac
+
+                      sleep 10
+                      attempt=$((attempt + 1))
+                    done
+
+                    echo "Production migration execution timed out"
+                    exit 1
+                '''
+            }
+        }
+
+        stage('Promote production revision') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    previous_revision="$(
+                      az containerapp revision list \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --output json \
+                        --only-show-errors \
+                      | jq -r '[.[] | select((.properties.trafficWeight // 0) > 0)][0].name // empty'
+                    )"
+
+                    if [ -z "${previous_revision}" ] || [ "${previous_revision}" = "null" ]; then
+                      echo "Azure did not return the currently serving production revision"
+                      exit 1
+                    fi
+
+                    previous_image="$(
+                      az containerapp revision show \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --revision "${previous_revision}" \
+                        --output json \
+                        --only-show-errors \
+                      | jq -r '.properties.template.containers[] | select(.name == "api") | .image'
+                    )"
+
+                    stable_fqdn="$(
+                      az containerapp show \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --query properties.configuration.ingress.fqdn \
+                        --output tsv \
+                        --only-show-errors
+                    )"
+
+                    if [ "${previous_image}" = "${API_IMAGE_BY_DIGEST}" ]; then
+                      echo "Production already serves ${API_IMAGE_BY_DIGEST}"
+
+                      curl \
+                        --fail \
+                        --silent \
+                        --show-error \
+                        --retry 24 \
+                        --retry-all-errors \
+                        --retry-delay 5 \
+                        "https://${stable_fqdn}/ready"
+
+                      bash scripts/smoke-test.sh "https://${stable_fqdn}"
+                      exit 0
+                    fi
+
+                    echo "Current production revision: ${previous_revision}"
+
+                    az containerapp ingress traffic set \
+                      --name "${PRODUCTION_CONTAINER_APP}" \
+                      --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                      --revision-weight "${previous_revision}=100" \
+                      --output none \
+                      --only-show-errors
+
+                    candidate_revision="${PRODUCTION_CONTAINER_APP}--${REVISION_SUFFIX}"
+
+                    if az containerapp revision show \
+                      --name "${PRODUCTION_CONTAINER_APP}" \
+                      --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                      --revision "${candidate_revision}" \
+                      --output none \
+                      --only-show-errors 2>/dev/null; then
+                      echo "Reusing candidate revision ${candidate_revision}"
+                    else
+                      az containerapp revision copy \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --from-revision "${previous_revision}" \
+                        --container-name api \
+                        --image "${API_IMAGE_BY_DIGEST}" \
+                        --revision-suffix "${REVISION_SUFFIX}" \
+                        --min-replicas 0 \
+                        --max-replicas 1 \
+                        --output none \
+                        --only-show-errors
+                    fi
+
+                    echo "Production candidate revision: ${candidate_revision}"
+
+                    attempt=1
+
+                    while [ "${attempt}" -le 60 ]; do
+                      provisioning_state="$(
+                        az containerapp revision show \
+                          --name "${PRODUCTION_CONTAINER_APP}" \
+                          --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                          --revision "${candidate_revision}" \
+                          --query properties.provisioningState \
+                          --output tsv \
+                          --only-show-errors
+                      )"
+
+                      echo "Candidate provisioning state: ${provisioning_state}"
+
+                      case "${provisioning_state}" in
+                        Provisioned)
+                          break
+                          ;;
+                        Failed|Degraded)
+                          echo "Production candidate failed to provision"
+                          exit 1
+                          ;;
+                      esac
+
+                      sleep 10
+                      attempt=$((attempt + 1))
+                    done
+
+                    if [ "${provisioning_state}" != "Provisioned" ]; then
+                      echo "Production candidate provisioning timed out"
+                      exit 1
+                    fi
+
+                    candidate_fqdn="$(
+                      az containerapp revision show \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --revision "${candidate_revision}" \
+                        --query properties.fqdn \
+                        --output tsv \
+                        --only-show-errors
+                    )"
+
+                    if [ -z "${candidate_fqdn}" ] || [ "${candidate_fqdn}" = "null" ]; then
+                      echo "Azure did not return the candidate revision hostname"
+                      exit 1
+                    fi
+
+                    echo "Validating zero-traffic candidate https://${candidate_fqdn}"
+
+                    curl \
+                      --fail \
+                      --silent \
+                      --show-error \
+                      --retry 24 \
+                      --retry-all-errors \
+                      --retry-delay 5 \
+                      "https://${candidate_fqdn}/health"
+
+                    curl \
+                      --fail \
+                      --silent \
+                      --show-error \
+                      --retry 24 \
+                      --retry-all-errors \
+                      --retry-delay 5 \
+                      "https://${candidate_fqdn}/ready"
+
+                    bash scripts/smoke-test.sh "https://${candidate_fqdn}"
+
+                    az containerapp ingress traffic set \
+                      --name "${PRODUCTION_CONTAINER_APP}" \
+                      --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                      --revision-weight "${candidate_revision}=100" \
+                      --output none \
+                      --only-show-errors
+
+                    echo "Production traffic now targets ${candidate_revision}"
+
+                    if ! curl \
+                      --fail \
+                      --silent \
+                      --show-error \
+                      --retry 24 \
+                      --retry-all-errors \
+                      --retry-delay 5 \
+                      "https://${stable_fqdn}/ready" \
+                      || ! bash scripts/smoke-test.sh "https://${stable_fqdn}"; then
+                      echo "Stable production verification failed; restoring ${previous_revision}"
+
+                      az containerapp ingress traffic set \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --revision-weight "${previous_revision}=100" \
+                        --output none \
+                        --only-show-errors
+
+                      exit 1
+                    fi
+
+                    echo "Production promotion succeeded: ${candidate_revision}"
                 '''
             }
         }
