@@ -1,0 +1,68 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+ssh_pwauth: false
+
+packages:
+  - ca-certificates
+  - curl
+  - docker.io
+  - docker-compose-v2
+  - git
+  - jq
+  - unzip
+
+write_files:
+  - path: /etc/orderflow-jenkins-Caddyfile
+    owner: root:root
+    permissions: "0644"
+    content: |
+      ${jenkins_hostname} {
+        encode zstd gzip
+        reverse_proxy controller:8080
+
+        header {
+          X-Content-Type-Options "nosniff"
+          Referrer-Policy "same-origin"
+          X-Frame-Options "SAMEORIGIN"
+        }
+      }
+
+  - path: /etc/orderflow-jenkins-compose.yaml
+    owner: root:root
+    permissions: "0644"
+    content: |
+      name: orderflow-jenkins
+
+      services:
+        controller:
+          image: ${jenkins_image}
+          restart: unless-stopped
+          expose:
+            - "8080"
+          volumes:
+            - jenkins_home:/var/jenkins_home
+
+        caddy:
+          image: ${caddy_image}
+          depends_on:
+            - controller
+          restart: unless-stopped
+          ports:
+            - "443:443"
+          volumes:
+            - /etc/orderflow-jenkins-Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+
+      volumes:
+        jenkins_home:
+        caddy_data:
+        caddy_config:
+
+runcmd:
+  - [systemctl, enable, --now, docker]
+  - [usermod, -aG, docker, "${admin_username}"]
+  - [docker, compose, -f, /etc/orderflow-jenkins-compose.yaml, pull]
+  - [docker, compose, -f, /etc/orderflow-jenkins-compose.yaml, up, -d]
