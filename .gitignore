@@ -28,3 +28,7 @@ jenkins_home/
 # Operating-system files
 .DS_Store
 Thumbs.db
+
+# Terraform saved plans
+tfplan
+*.tfplan
