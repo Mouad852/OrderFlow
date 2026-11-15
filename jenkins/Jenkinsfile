@@ -11,12 +11,30 @@ pipeline {
 
     environment {
         UV_LINK_MODE = 'copy'
+
+        AZURE_CONFIG_DIR      = "${WORKSPACE}/.azure"
+        AZURE_SUBSCRIPTION_ID = '9067ae35-ee11-45a5-bfc1-11556de9b246'
+        AZURE_CLIENT_ID       = '4cf9718b-5495-42c9-90d4-0762ff53685c'
+        AZURE_RESOURCE_GROUP  = 'rg-orderflow-staging-swe'
+        ACR_NAME              = 'acrorderflowmouadswe'
+        ACR_LOGIN_SERVER      = 'acrorderflowmouadswe.azurecr.io'
+        CONTAINER_APP_NAME    = 'ca-orderflow-api-staging-swe'
+        MIGRATION_JOB_NAME    = 'caj-orderflow-migrate-swe'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
+
+                script {
+                    env.IMAGE_TAG = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.API_IMAGE = "${env.ACR_LOGIN_SERVER}/orderflow-api:${env.IMAGE_TAG}"
+                }
             }
         }
 
@@ -40,7 +58,7 @@ pipeline {
             }
         }
 
-        stage('PostgreSQL integration tests'){
+        stage('PostgreSQL integration tests') {
             steps {
                 sh 'uv run pytest tests/integration -q'
             }
@@ -49,12 +67,12 @@ pipeline {
         stage('Build API image') {
             steps {
                 sh '''
-                    image_tag="$(git rev-parse HEAD)"
                     docker build \
                       --file docker/Dockerfile.api \
-                      --tag "orderflow-api:${image_tag}" \
+                      --tag "orderflow-api:${IMAGE_TAG}" \
                       .
-                    docker image inspect "orderflow-api:${image_tag}"
+
+                    docker image inspect "orderflow-api:${IMAGE_TAG}"
                 '''
             }
         }
@@ -62,8 +80,6 @@ pipeline {
         stage('Scan API image') {
             steps {
                 sh '''
-                    image_tag="$(git rev-parse HEAD)"
-
                     docker run --rm \
                         --security-opt no-new-privileges \
                         -v /var/run/docker.sock:/var/run/docker.sock \
@@ -73,16 +89,179 @@ pipeline {
                             --exit-code 1 \
                             --severity CRITICAL,HIGH \
                             --ignore-unfixed \
-                            "orderflow-api:${image_tag}"
+                            "orderflow-api:${IMAGE_TAG}"
                 '''
             }
         }
+
+        stage('Authenticate to Azure') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    az login \
+                        --identity \
+                        --client-id "${AZURE_CLIENT_ID}" \
+                        --output none
+
+                    az account set \
+                        --subscription "${AZURE_SUBSCRIPTION_ID}"
+
+                    az account show \
+                        --query '{Subscription:id,Identity:user.name}' \
+                        --output json
+                '''
+            }
+        }
+
+        stage('Publish API image') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    az acr login \
+                        --name "${ACR_NAME}" \
+                        --output none
+
+                    docker tag \
+                        "orderflow-api:${IMAGE_TAG}" \
+                        "${API_IMAGE}"
+
+                    docker push "${API_IMAGE}"
+                '''
+            }
+        }
+
+        stage('Run staging migrations') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    execution_name="$(
+                      az containerapp job start \
+                          --name "${MIGRATION_JOB_NAME}" \
+                          --resource-group "${AZURE_RESOURCE_GROUP}" \
+                          --image "${API_IMAGE}" \
+                          --query name \
+                          --output tsv \
+                          --only-show-errors
+                    )"
+
+                    if [ -z "${execution_name}" ] || [ "${execution_name}" = "null" ]; then
+                      echo "Azure did not return a migration execution name"
+                      exit 1
+                    fi
+
+                    echo "Migration execution: ${execution_name}"
+
+                    attempt=1
+
+                    while [ "${attempt}" -le 90 ]; do
+                      status="$(
+                        az containerapp job execution show \
+                          --name "${MIGRATION_JOB_NAME}" \
+                          --resource-group "${AZURE_RESOURCE_GROUP}" \
+                          --job-execution-name "${execution_name}" \
+                          --query properties.status \
+                          --output tsv \
+                          --only-show-errors
+                      )"
+
+                      echo "Migration status: ${status}"
+
+                      case "${status}" in
+                        Succeeded)
+                          exit 0
+                          ;;
+                        Failed|Degraded|Stopped)
+                          az containerapp job execution show \
+                            --name "${MIGRATION_JOB_NAME}" \
+                            --resource-group "${AZURE_RESOURCE_GROUP}" \
+                            --job-execution-name "${execution_name}" \
+                            --output json
+
+                          exit 1
+                          ;;
+                      esac
+
+                      sleep 10
+                      attempt=$((attempt + 1))
+                    done
+
+                    echo "Migration execution timed out"
+                    exit 1
+                '''
+            }
+        }
+
+        stage('Deploy staging API') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    az containerapp update \
+                      --name "${CONTAINER_APP_NAME}" \
+                      --resource-group "${AZURE_RESOURCE_GROUP}" \
+                      --image "${API_IMAGE}" \
+                      --output none \
+                      --only-show-errors
+                '''
+            }
+        }
+
+        stage('Verify staging') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    api_fqdn="$(
+                      az containerapp show \
+                          --name "${CONTAINER_APP_NAME}" \
+                          --resource-group "${AZURE_RESOURCE_GROUP}" \
+                          --query properties.configuration.ingress.fqdn \
+                          --output tsv \
+                          --only-show-errors
+                    )"
+
+                    if [ -z "${api_fqdn}" ] || [ "${api_fqdn}" = "null" ]; then
+                      echo "Azure did not return the staging API hostname"
+                      exit 1
+                    fi
+
+                    api_url="https://${api_fqdn}"
+                    echo "Verifying ${api_url}"
+
+                    curl \
+                      --fail \
+                      --silent \
+                      --show-error \
+                      --retry 24 \
+                      --retry-all-errors \
+                      --retry-delay 5 \
+                      "${api_url}/health"
+
+                    bash scripts/smoke-test.sh "${api_url}"
+                '''
+            }
+        }
+
     }
 
     post {
         always {
             junit allowEmptyResults: true, testResults: 'junit.xml'
             archiveArtifacts allowEmptyArchive: true, artifacts: 'coverage.xml'
+            sh 'rm -rf "${AZURE_CONFIG_DIR}"'
         }
     }
 }
