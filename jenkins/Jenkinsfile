@@ -143,14 +143,21 @@ pipeline {
 
             steps {
                 sh '''
+                    az containerapp job update \
+                        --name "${MIGRATION_JOB_NAME}" \
+                        --resource-group "${AZURE_RESOURCE_GROUP}" \
+                        --container-name migrate \
+                        --image "${API_IMAGE}" \
+                        --output none \
+                        --only-show-errors
+
                     execution_name="$(
-                      az containerapp job start \
-                          --name "${MIGRATION_JOB_NAME}" \
-                          --resource-group "${AZURE_RESOURCE_GROUP}" \
-                          --image "${API_IMAGE}" \
-                          --query name \
-                          --output tsv \
-                          --only-show-errors
+                        az containerapp job start \
+                            --name "${MIGRATION_JOB_NAME}" \
+                            --resource-group "${AZURE_RESOURCE_GROUP}" \
+                            --query name \
+                            --output tsv \
+                            --only-show-errors
                     )"
 
                     if [ -z "${execution_name}" ] || [ "${execution_name}" = "null" ]; then
