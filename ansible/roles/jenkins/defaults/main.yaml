@@ -1,0 +1,11 @@
+---
+jenkins_hostname: orderflow-jenkins-f15ksl.swedencentral.cloudapp.azure.com
+
+jenkins_image: >-
+  jenkins/jenkins:2.590-jdk21@sha256:1b8068fd8b82518be3bb2e89560efa44f67f5fbc1ab3a9b59826c7f8f70f2260
+
+caddy_image: >-
+  caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+
+jenkins_compose_path: /etc/orderflow-jenkins-compose.yaml
+jenkins_caddyfile_path: /etc/orderflow-jenkins-Caddyfile

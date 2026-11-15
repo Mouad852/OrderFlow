@@ -1,0 +1,7 @@
+---
+- name: Configure OrderFlow Jenkins server
+  hosts: jenkins
+  become: true
+
+  roles:
+    - jenkins

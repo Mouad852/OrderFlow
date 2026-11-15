@@ -1,0 +1,27 @@
+name: orderflow-jenkins
+
+services:
+  controller:
+    image: {{ jenkins_image }}
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+
+  caddy:
+    image: {{ caddy_image }}
+    depends_on:
+      - controller
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    volumes:
+      - {{ jenkins_caddyfile_path }}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  jenkins_home:
+  caddy_data:
+  caddy_config:

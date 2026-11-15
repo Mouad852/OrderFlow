@@ -1,0 +1,13 @@
+---
+- name: Apply Jenkins stack
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ jenkins_compose_path }}"
+      - up
+      - --detach
+      - --remove-orphans
+  register: jenkins_compose_result
+  changed_when: true

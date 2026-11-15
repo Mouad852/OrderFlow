@@ -1,0 +1,10 @@
+{{ jenkins_hostname }} {
+  encode zstd gzip
+  reverse_proxy controller:8080
+
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "same-origin"
+    X-Frame-Options "SAMEORIGIN"
+  }
+}
