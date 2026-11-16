@@ -309,10 +309,21 @@ pipeline {
 
             steps {
                 timeout(time: 24, unit: 'HOURS') {
-                    input(
-                        message: "Promote ${env.API_IMAGE_BY_DIGEST} to production?",
-                        ok: 'Promote'
-                    )
+                    script {
+                        def forceProductionRollback = input(
+                            message: "Promote ${env.API_IMAGE_BY_DIGEST} to production?",
+                            ok: 'Promote',
+                            parameters: [
+                                booleanParam(
+                                    name: 'FORCE_PRODUCTION_ROLLBACK',
+                                    defaultValue: false,
+                                    description: 'After candidate validation, intentionally roll production traffic back to prove the rollback path.'
+                                )
+                            ]
+                        )
+
+                        env.FORCE_PRODUCTION_ROLLBACK = forceProductionRollback.toString()
+                    }
                 }
             }
         }
@@ -558,16 +569,26 @@ pipeline {
 
                     echo "Production traffic now targets ${candidate_revision}"
 
-                    if ! curl \
+                    post_promotion_failed=false
+
+                    if [ "${FORCE_PRODUCTION_ROLLBACK:-false}" = "true" ]; then
+                      echo "Controlled rollback drill requested; intentionally failing post-promotion verification"
+                      post_promotion_failed=true
+                    elif ! curl \
                       --fail \
                       --silent \
                       --show-error \
                       --retry 24 \
                       --retry-all-errors \
                       --retry-delay 5 \
-                      "https://${stable_fqdn}/ready" \
-                      || ! bash scripts/smoke-test.sh "https://${stable_fqdn}" "${IMAGE_TAG}"; then
-                      echo "Stable production verification failed; restoring ${previous_revision}"
+                      "https://${stable_fqdn}/ready"; then
+                      post_promotion_failed=true
+                    elif ! bash scripts/smoke-test.sh "https://${stable_fqdn}" "${IMAGE_TAG}"; then
+                      post_promotion_failed=true
+                    fi
+
+                    if [ "${post_promotion_failed}" = "true" ]; then
+                      echo "Stable production verification failed or rollback drill was requested; restoring ${previous_revision}"
 
                       az containerapp ingress traffic set \
                         --name "${PRODUCTION_CONTAINER_APP}" \
