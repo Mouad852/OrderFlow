@@ -297,6 +297,37 @@ pipeline {
                       --retry-delay 5 \
                       "${api_url}/health"
 
+                    attempt=1
+
+                    while [ "${attempt}" -le 24 ]; do
+                      info_response="$(
+                        curl \
+                          --fail \
+                          --silent \
+                          --show-error \
+                          "${api_url}/info"
+                      )" || {
+                        echo "Could not read staging build identity"
+                        exit 1
+                      }
+
+                      staging_build_sha="$(printf '%s' "${info_response}" | jq -r '.build_sha')"
+
+                      echo "Staging build SHA: ${staging_build_sha}"
+
+                      if [ "${staging_build_sha}" = "${IMAGE_TAG}" ]; then
+                        break
+                      fi
+
+                      sleep 5
+                      attempt=$((attempt + 1))
+                    done
+
+                    if [ "${staging_build_sha}" != "${IMAGE_TAG}" ]; then
+                      echo "Staging did not begin serving expected build ${IMAGE_TAG}"
+                      exit 1
+                    fi
+
                     bash scripts/smoke-test.sh "${api_url}" "${IMAGE_TAG}"
                 '''
             }
