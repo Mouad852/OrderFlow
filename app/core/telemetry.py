@@ -36,5 +36,8 @@ def instrument_sqlalchemy(engine: Engine) -> bool:
 
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
-    SQLAlchemyInstrumentor().instrument(engine=engine)
+    SQLAlchemyInstrumentor().instrument(
+        engine=engine,
+        raise_exception_on_conflict=True,
+    )
     return True
