@@ -6,13 +6,17 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
+from app.core.telemetry import instrument_sqlalchemy
 
 
 @lru_cache
 def get_engine() -> Engine:
     database_url = str(get_settings().database_url)
+    engine = create_engine(database_url, pool_pre_ping=True)
 
-    return create_engine(database_url, pool_pre_ping=True)
+    instrument_sqlalchemy(engine)
+
+    return engine
 
 
 @lru_cache

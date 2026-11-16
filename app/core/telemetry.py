@@ -1,7 +1,13 @@
 import logging
 import os
 
+from sqlalchemy.engine import Engine
+
 logger = logging.getLogger(__name__)
+
+
+def telemetry_enabled() -> bool:
+    return bool(os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"))
 
 
 def configure_telemetry() -> bool:
@@ -11,6 +17,8 @@ def configure_telemetry() -> bool:
         logger.info("Azure Monitor telemetry is disabled: no connection string is configured")
         return False
 
+    os.environ.setdefault("OTEL_SERVICE_NAME", "orderflow-api")
+
     from microsoft.opentelemetry import use_microsoft_opentelemetry
 
     use_microsoft_opentelemetry(
@@ -19,4 +27,14 @@ def configure_telemetry() -> bool:
     )
 
     logger.info("Azure Monitor telemetry is enabled")
+    return True
+
+
+def instrument_sqlalchemy(engine: Engine) -> bool:
+    if not telemetry_enabled():
+        return False
+
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+    SQLAlchemyInstrumentor().instrument(engine=engine)
     return True
