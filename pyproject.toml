@@ -7,6 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "alembic>=1.14,<2",
   "fastapi>=0.115,<1",
+  "microsoft-opentelemetry>=1.6.0",
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.6,<3",
   "sqlalchemy>=2.0,<3",

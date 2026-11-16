@@ -1,4 +1,10 @@
-from fastapi import FastAPI, HTTPException, status
+# ruff: noqa: E402
+import fastapi
+
+from app.core.telemetry import configure_telemetry
+
+configure_telemetry()
+
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -6,7 +12,7 @@ from app.api.orders import router as orders_router
 from app.core.config import get_settings
 from app.database.session import get_engine
 
-app = FastAPI(title="OrderFlow API", version="0.1.0")
+app = fastapi.FastAPI(title="OrderFlow API", version="0.1.0")
 app.include_router(orders_router)
 
 
@@ -32,8 +38,8 @@ def ready() -> dict[str, str]:
         with get_engine().connect() as connection:
             connection.execute(text("SELECT 1"))
     except SQLAlchemyError as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         ) from error
 

@@ -1,0 +1,22 @@
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+
+def configure_telemetry() -> bool:
+    connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+
+    if not connection_string:
+        logger.info("Azure Monitor telemetry is disabled: no connection string is configured")
+        return False
+
+    from microsoft.opentelemetry import use_microsoft_opentelemetry
+
+    use_microsoft_opentelemetry(
+        enable_azure_monitor=True,
+        azure_monitor_connection_string=connection_string,
+    )
+
+    logger.info("Azure Monitor telemetry is enabled")
+    return True
