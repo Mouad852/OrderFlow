@@ -560,12 +560,79 @@ pipeline {
 
                     bash scripts/smoke-test.sh "https://${candidate_fqdn}" "${IMAGE_TAG}"
 
+                    rollback_to_previous() {
+                        az containerapp ingress traffic set \
+                        --name "${PRODUCTION_CONTAINER_APP}" \
+                        --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                        --revision-weight "${previous_revision}=100" \
+                        --output none \
+                        --only-show-errors
+                    }
+
                     az containerapp ingress traffic set \
+                    --name "${PRODUCTION_CONTAINER_APP}" \
+                    --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                    --revision-weight "${previous_revision}=90" "${candidate_revision}=10" \
+                    --output none \
+                    --only-show-errors
+
+                    echo "Canary traffic: 90% ${previous_revision}, 10% ${candidate_revision}"
+
+                    candidate_hits=0
+
+                    for attempt in $(seq 1 60); do
+                    response="$(
+                        curl \
+                        --fail \
+                        --silent \
+                        --show-error \
+                        "https://${stable_fqdn}/info"
+                    )" || {
+                        echo "Canary traffic check could not reach production"
+                        rollback_to_previous
+                        exit 1
+                    }
+
+                    observed_sha="$(printf '%s' "${response}" | jq -r '.build_sha')"
+
+                    if [ "${observed_sha}" = "${IMAGE_TAG}" ]; then
+                        candidate_hits=$((candidate_hits + 1))
+                    fi
+
+                    sleep 1
+                    done
+
+                    echo "Candidate responses through the production URL: ${candidate_hits}"
+
+                    if [ "${candidate_hits}" -lt 1 ]; then
+                    echo "No requests reached the candidate revision; restoring stable traffic"
+                    rollback_to_previous
+                    exit 1
+                    fi
+
+                    if ! curl \
+                    --fail \
+                    --silent \
+                    --show-error \
+                    --retry 12 \
+                    --retry-all-errors \
+                    --retry-delay 5 \
+                    "https://${candidate_fqdn}/ready"; then
+                    echo "Candidate failed readiness during the canary; restoring stable traffic"
+                    rollback_to_previous
+                    exit 1
+                    fi
+
+                    if ! az containerapp ingress traffic set \
                       --name "${PRODUCTION_CONTAINER_APP}" \
                       --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
                       --revision-weight "${candidate_revision}=100" \
                       --output none \
-                      --only-show-errors
+                      --only-show-errors; then
+                      echo "Could not complete canary promotion; restoring stable traffic"
+                      rollback_to_previous
+                      exit 1
+                    fi
 
                     echo "Production traffic now targets ${candidate_revision}"
 
