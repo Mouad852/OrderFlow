@@ -654,6 +654,52 @@ pipeline {
                     exit 1
                     fi
 
+                    echo "Holding the candidate at 10% traffic for five minutes"
+                    sleep 300
+
+                    app_id="$(
+                        az containerapp show \
+                            --name "${PRODUCTION_CONTAINER_APP}" \
+                            --resource-group "${PRODUCTION_RESOURCE_GROUP}" \
+                            --query id \
+                            --output tsv \
+                            --only-show-errors
+                    )"
+
+                    metric_response="$(
+                        az monitor metrics list \
+                            --resource "${app_id}" \
+                            --namespace "Microsoft.App/containerapps" \
+                            --metrics "Requests" \
+                            --aggregation "Total" \
+                            --interval "PT1M" \
+                            --offset "10m" \
+                            --filter "revisionName eq '${candidate_revision}' and statusCodeCategory eq '5xx'" \
+                            --output json \
+                            --only-show-errors
+                    )" || {
+                        echo "Could not read candidate Azure Monitor metrics; restoring stable traffic"
+                        rollback_to_previous
+                        exit 1
+                    }
+
+                    candidate_5xx="$(
+                        printf '%s' "${metric_response}" | \
+                        jq '[.value[0].timeseries[]?.data[]?.total // 0] | add // 0'
+                    )" || {
+                        echo "Could not parse candidate Azure Monitor metrics; restoring stable traffic"
+                        rollback_to_previous
+                        exit 1
+                    }
+
+                    echo "Candidate 5xx requests during canary: ${candidate_5xx}"
+
+                    if [ "${candidate_5xx}" -gt 0 ]; then
+                        echo "Candidate returned 5xx responses; restoring stable traffic"
+                        rollback_to_previous
+                        exit 1
+                    fi
+
                     if ! az containerapp ingress traffic set \
                       --name "${PRODUCTION_CONTAINER_APP}" \
                       --resource-group "${PRODUCTION_RESOURCE_GROUP}" \

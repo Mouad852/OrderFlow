@@ -239,6 +239,13 @@ resource "azurerm_role_assignment" "jenkins_api" {
   skip_service_principal_aad_check = true
 }
 
+resource "azurerm_role_assignment" "jenkins_monitoring_reader" {
+  scope                            = azurerm_container_app.api.id
+  role_definition_name             = "Monitoring Reader"
+  principal_id                     = var.jenkins_identity_principal_id
+  skip_service_principal_aad_check = true
+}
+
 resource "azurerm_role_assignment" "jenkins_migration_job" {
   scope                            = azurerm_container_app_job.migrate.id
   role_definition_name             = "Container Apps Jobs Contributor"
