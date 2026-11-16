@@ -1,6 +1,8 @@
 FROM python:3.12.16-slim-bookworm@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4
+ARG BUILD_SHA=development
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    BUILD_SHA=${BUILD_SHA} \
     PATH="/app/.venv/bin:${PATH}"
 
 WORKDIR /app

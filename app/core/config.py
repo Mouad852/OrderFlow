@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: PostgresDsn
     environment: str
     log_level: str
+    build_sha: str = "development"
     applicationinsights_connection_string: str | None = None
 
 

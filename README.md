@@ -36,6 +36,7 @@ To also erase the local PostgreSQL data volume, run `docker compose down -v`. Th
 | `PATCH` | `/orders/{order_id}/cancel` | Cancel a `PENDING` order. |
 | `GET` | `/health` | Check that the API process is alive. |
 | `GET` | `/ready` | Check that PostgreSQL is reachable. |
+| `GET` | `/info` | Report the service, environment, and deployed Git commit. |
 
 Example request:
 

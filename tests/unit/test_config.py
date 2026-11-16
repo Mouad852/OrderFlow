@@ -15,6 +15,7 @@ def test_settings_accepts_required_values() -> None:
 
     assert settings.environment == "test"
     assert settings.log_level == "INFO"
+    assert settings.build_sha == "development"
 
 
 def test_settings_requires_database_url() -> None:
@@ -29,8 +30,10 @@ def test_get_settings_reads_environment_variables(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     monkeypatch.setenv("ENVIRONMENT", "test")
     monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("BUILD_SHA", "abc123")
 
     settings = get_settings()
 
     assert settings.environment == "test"
+    assert settings.build_sha == "abc123"
     get_settings.cache_clear()

@@ -2,9 +2,24 @@
 set -euo pipefail
 
 base_url="${1:-http://localhost:8000}"
+expected_build_sha="${2:-}"
 
 curl --fail-with-body --silent --show-error "${base_url}/health" | jq -e '.status == "ok"'
 curl --fail-with-body --silent --show-error "${base_url}/ready" | jq -e '.status == "ready"'
+
+info_response="$(
+  curl --fail-with-body --silent --show-error "${base_url}/info"
+)"
+
+jq -e \
+  '.service == "orderflow-api" and (.environment | length > 0) and (.build_sha | length > 0)' \
+  <<<"${info_response}"
+
+if [ -n "${expected_build_sha}" ]; then
+  jq -e --arg expected_build_sha "${expected_build_sha}" \
+    '.build_sha == $expected_build_sha' \
+    <<<"${info_response}"
+fi
 
 order_id="$(
   curl --fail-with-body --silent --show-error \

@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.orders import router as orders_router
+from app.core.config import get_settings
 from app.database.session import get_engine
 
 app = FastAPI(title="OrderFlow API", version="0.1.0")
@@ -12,6 +13,17 @@ app.include_router(orders_router)
 @app.get("/health", tags=["Operations"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/info", tags=["Operations"])
+def info() -> dict[str, str]:
+    settings = get_settings()
+
+    return {
+        "service": "orderflow-api",
+        "environment": settings.environment,
+        "build_sha": settings.build_sha,
+    }
 
 
 @app.get("/ready", tags=["Operations"])

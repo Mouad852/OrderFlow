@@ -73,6 +73,7 @@ pipeline {
                 sh '''
                     docker build \
                       --file docker/Dockerfile.api \
+                      --build-arg "BUILD_SHA=${IMAGE_TAG}" \
                       --tag "orderflow-api:${IMAGE_TAG}" \
                       .
 
@@ -292,7 +293,7 @@ pipeline {
                       --retry-delay 5 \
                       "${api_url}/health"
 
-                    bash scripts/smoke-test.sh "${api_url}"
+                    bash scripts/smoke-test.sh "${api_url}" "${IMAGE_TAG}"
                 '''
             }
         }
@@ -435,7 +436,7 @@ pipeline {
                         --retry-delay 5 \
                         "https://${stable_fqdn}/ready"
 
-                      bash scripts/smoke-test.sh "https://${stable_fqdn}"
+                      bash scripts/smoke-test.sh "https://${stable_fqdn}" "${IMAGE_TAG}"
                       exit 0
                     fi
 
@@ -542,7 +543,7 @@ pipeline {
                       --retry-delay 5 \
                       "https://${candidate_fqdn}/ready"
 
-                    bash scripts/smoke-test.sh "https://${candidate_fqdn}"
+                    bash scripts/smoke-test.sh "https://${candidate_fqdn}" "${IMAGE_TAG}"
 
                     az containerapp ingress traffic set \
                       --name "${PRODUCTION_CONTAINER_APP}" \
@@ -561,7 +562,7 @@ pipeline {
                       --retry-all-errors \
                       --retry-delay 5 \
                       "https://${stable_fqdn}/ready" \
-                      || ! bash scripts/smoke-test.sh "https://${stable_fqdn}"; then
+                      || ! bash scripts/smoke-test.sh "https://${stable_fqdn}" "${IMAGE_TAG}"; then
                       echo "Stable production verification failed; restoring ${previous_revision}"
 
                       az containerapp ingress traffic set \
