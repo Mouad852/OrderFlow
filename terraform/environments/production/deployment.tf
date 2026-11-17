@@ -189,6 +189,26 @@ resource "azurerm_container_app" "api" {
       }
 
       env {
+        name  = "AUTH_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name  = "ENTRA_TENANT_ID"
+        value = var.entra_tenant_id
+      }
+
+      env {
+        name  = "ENTRA_API_CLIENT_ID"
+        value = var.entra_api_client_id
+      }
+
+      env {
+        name  = "ENTRA_REQUIRED_ROLE"
+        value = "OrderFlow.Orders.ReadWrite"
+      }
+
+      env {
         name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         secret_name = "applicationinsights-connection-string"
       }
