@@ -246,7 +246,6 @@ pipeline {
                 sh '''
                     cosign sign \
                         --yes \
-                        --tlog-upload=false \
                         --key "${COSIGN_KEY_URI}" \
                         -a "git_sha=${IMAGE_TAG}" \
                         -a "jenkins_build=${BUILD_TAG}" \
