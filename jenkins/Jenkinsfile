@@ -29,6 +29,8 @@ pipeline {
         PRODUCTION_RESOURCE_GROUP    = 'rg-orderflow-production-swe'
         PRODUCTION_CONTAINER_APP     = 'ca-orderflow-api-production-swe'
         PRODUCTION_MIGRATION_JOB     = 'caj-orderflow-migrate-prod-swe'
+
+        COSIGN_KEY_URI = 'azurekms://kv-orderflow-prod-swe.vault.azure.net/orderflow-image-signing'
     }
 
     stages {
@@ -235,6 +237,43 @@ pipeline {
             }
         }
 
+        stage('Sign published API image') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    cosign sign \
+                        --yes \
+                        --tlog-upload=false \
+                        --key "${COSIGN_KEY_URI}" \
+                        -a "git_sha=${IMAGE_TAG}" \
+                        -a "jenkins_build=${BUILD_TAG}" \
+                        "${API_IMAGE_BY_DIGEST}"
+                '''
+            }
+        }
+
+        stage('Verify API signature for staging') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    cosign verify \
+                        --key "${COSIGN_KEY_URI}" \
+                        -a "git_sha=${IMAGE_TAG}" \
+                        -a "jenkins_build=${BUILD_TAG}" \
+                        "${API_IMAGE_BY_DIGEST}" \
+                        > cosign-verify-staging.json
+
+                    jq -e 'length > 0' cosign-verify-staging.json > /dev/null
+                '''
+            }
+        }
+
         stage('Record release evidence') {
             when {
                 branch 'main'
@@ -246,11 +285,13 @@ pipeline {
                         --arg git_sha "${IMAGE_TAG}" \
                         --arg image "${API_IMAGE_BY_DIGEST}" \
                         --arg image_digest "${API_IMAGE_DIGEST}" \
+                        --arg signing_key "${COSIGN_KEY_URI}" \
                         --arg build_url "${BUILD_URL}" \
                         '{
                             git_sha: $git_sha,
                             image: $image,
                             image_digest: $image_digest,
+                            signing_key: $signing_key,
                             build_url: $build_url
                         }' > release-evidence.json
                 '''
@@ -452,6 +493,25 @@ pipeline {
                         env.FORCE_PRODUCTION_ROLLBACK = forceProductionRollback.toString()
                     }
                 }
+            }
+        }
+
+        stage('Verify API signature for production') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    cosign verify \
+                        --key "${COSIGN_KEY_URI}" \
+                        -a "git_sha=${IMAGE_TAG}" \
+                        -a "jenkins_build=${BUILD_TAG}" \
+                        "${API_IMAGE_BY_DIGEST}" \
+                        > cosign-verify-production.json
+
+                    jq -e 'length > 0' cosign-verify-production.json > /dev/null
+                '''
             }
         }
 
@@ -879,7 +939,7 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true, testResults: 'junit.xml'
-            archiveArtifacts allowEmptyArchive: true, artifacts: 'coverage.xml,sbom.cdx.json,release-evidence.json'
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'coverage.xml,sbom.cdx.json,release-evidence.json,cosign-verify-*.json'
             sh 'rm -rf "${AZURE_CONFIG_DIR}"'
         }
     }
