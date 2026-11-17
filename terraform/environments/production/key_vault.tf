@@ -24,3 +24,43 @@ resource "azurerm_role_assignment" "deployer_key_vault_secrets_officer" {
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = data.azurerm_client_config.current.object_id
 }
+
+resource "azurerm_role_assignment" "deployer_key_vault_crypto_officer" {
+  scope                = azurerm_key_vault.production.id
+  role_definition_name = "Key Vault Crypto Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+resource "azurerm_key_vault_key" "image_signing" {
+  name         = "orderflow-image-signing"
+  key_vault_id = azurerm_key_vault.production.id
+  key_type     = "EC"
+  curve        = "P-256"
+
+  key_opts = [
+    "sign",
+    "verify",
+  ]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [
+    azurerm_role_assignment.deployer_key_vault_crypto_officer,
+  ]
+}
+
+resource "azurerm_role_assignment" "jenkins_key_vault_crypto_user" {
+  scope                = azurerm_key_vault.production.id
+  role_definition_name = "Key Vault Crypto User"
+  principal_id         = var.jenkins_identity_principal_id
+
+  depends_on = [
+    azurerm_key_vault_key.image_signing
+  ]
+}
+
+output "cosign_key_uri" {
+  value = "azurekms://${azurerm_key_vault.production.name}.vault.azure.net/${azurerm_key_vault_key.image_signing.name}"
+}
