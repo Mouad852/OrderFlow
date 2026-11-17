@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_orders_access
 from app.database.session import get_db
 from app.schemas.orders import OrderCreate, OrderList, OrderRead
 from app.services.orders import (
@@ -14,7 +15,11 @@ from app.services.orders import (
     list_orders,
 )
 
-router = APIRouter(prefix="/orders", tags=["Orders"])
+router = APIRouter(
+    prefix="/orders",
+    tags=["Orders"],
+    dependencies=[Depends(require_orders_access)],
+)
 
 
 @router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED)

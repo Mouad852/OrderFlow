@@ -183,6 +183,26 @@ resource "azurerm_container_app" "api" {
       }
 
       env {
+        name  = "AUTH_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name  = "ENTRA_TENANT_ID"
+        value = var.entra_tenant_id
+      }
+
+      env {
+        name  = "ENTRA_API_CLIENT_ID"
+        value = var.entra_api_client_id
+      }
+
+      env {
+        name  = "ENTRA_REQUIRED_ROLE"
+        value = "OrderFlow.Orders.ReadWrite"
+      }
+
+      env {
         name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         secret_name = "applicationinsights-connection-string"
       }
@@ -214,6 +234,13 @@ resource "azurerm_container_app" "api" {
     azurerm_role_assignment.api_acr_pull,
     azurerm_role_assignment.api_key_vault_secrets_user,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      template[0].container[0].image,
+      template[0].revision_suffix,
+    ]
+  }
 
   tags = local.common_tags
 }

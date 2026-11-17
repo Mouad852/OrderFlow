@@ -33,6 +33,18 @@ variable "location" {
   default     = "swedencentral"
 }
 
+variable "entra_tenant_id" {
+  description = "Microsoft Entra tenant that issues OrderFlow API access tokens."
+  type        = string
+  default     = "b0b08c91-f921-486d-9d9f-5aff2b86160a"
+}
+
+variable "entra_api_client_id" {
+  description = "Application (client) ID of the OrderFlow Entra API registration."
+  type        = string
+  default     = "c098978c-a5c8-4864-8ad7-ec5b2a1f74b8"
+}
+
 locals {
   name_suffix = "swe"
 
