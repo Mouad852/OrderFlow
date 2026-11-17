@@ -15,6 +15,8 @@ jenkins_docker_cli_image: >-
 jenkins_terraform_version: "1.17.2"
 jenkins_trivy_version: "0.76.0"
 
+jenkins_cosign_version: "3.1.4"
+
 jenkins_agent_image: orderflow-jenkins-agent:local
 jenkins_agent_name: orderflow-azure-agent
 jenkins_agent_workdir: /home/jenkins/agent

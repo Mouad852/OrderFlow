@@ -48,6 +48,22 @@ RUN trivy_archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
     && rm -f "${trivy_archive}" "trivy_${TRIVY_VERSION}_checksums.txt" \
     && trivy --version
 
+ARG COSIGN_VERSION={{ jenkins_cosign_version }}
+
+RUN cosign_binary="cosign-linux-amd64" \
+    && curl --fail --location --silent --show-error \
+        "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${cosign_binary}" \
+        --output "/tmp/${cosign_binary}" \
+    && curl --fail --location --silent --show-error \
+        "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt" \
+        --output "/tmp/cosign_checksums.txt" \
+    && cd /tmp \
+    && grep " ${cosign_binary}$" cosign_checksums.txt \
+        | sha256sum --check --status \
+    && install -m 0755 "${cosign_binary}" /usr/local/bin/cosign \
+    && rm -f "${cosign_binary}" cosign_checksums.txt \
+    && cosign version
+
 RUN curl --fail --location --silent --show-error \
         https://aka.ms/InstallAzureCLIDeb \
         --output /tmp/install-azure-cli.sh \
