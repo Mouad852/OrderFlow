@@ -79,18 +79,14 @@ pipeline {
         stage('Scan Terraform configuration') {
             steps {
                 sh '''
-                    docker run --rm \
-                        --security-opt no-new-privileges \
-                        -v "${WORKSPACE}:/workspace:ro" \
-                        -v trivy-cache:/root/.cache \
-                        aquasec/trivy:0.76.0 config \
-                            --skip-version-check \
-                            --misconfig-scanners terraform \
-                            --skip-dirs '.terraform' \
-                            --ignorefile /workspace/.trivyignore.yaml \
-                            --exit-code 1 \
-                            --severity CRITICAL,HIGH \
-                            /workspace/terraform
+                    trivy config \
+                        --skip-version-check \
+                        --misconfig-scanners terraform \
+                        --skip-dirs '.terraform' \
+                        --ignorefile .trivyignore.yaml \
+                        --exit-code 1 \
+                        --severity CRITICAL,HIGH \
+                        terraform
                 '''
             }
         }

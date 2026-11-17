@@ -12,6 +12,7 @@ RUN apt-get update \
         curl \
         git \
         jq \
+        tar \
         unzip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,6 +31,22 @@ RUN terraform_archive="terraform_${TERRAFORM_VERSION}_linux_amd64.zip" \
     && unzip -q "${terraform_archive}" -d /usr/local/bin \
     && rm -f "${terraform_archive}" terraform_SHA256SUMS \
     && terraform version
+
+ARG TRIVY_VERSION={{ jenkins_trivy_version }}
+
+RUN trivy_archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+    && curl --fail --location --silent --show-error \
+        "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${trivy_archive}" \
+        --output "/tmp/${trivy_archive}" \
+    && curl --fail --location --silent --show-error \
+        "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt" \
+        --output "/tmp/trivy_${TRIVY_VERSION}_checksums.txt" \
+    && cd /tmp \
+    && grep " ${trivy_archive}$" "trivy_${TRIVY_VERSION}_checksums.txt" \
+        | sha256sum --check --status \
+    && tar -xzf "${trivy_archive}" -C /usr/local/bin trivy \
+    && rm -f "${trivy_archive}" "trivy_${TRIVY_VERSION}_checksums.txt" \
+    && trivy --version
 
 RUN curl --fail --location --silent --show-error \
         https://aka.ms/InstallAzureCLIDeb \
