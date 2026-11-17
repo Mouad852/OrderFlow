@@ -108,6 +108,12 @@ resource "azurerm_container_app_job" "migrate" {
     azurerm_role_assignment.api_key_vault_secrets_user,
   ]
 
+  lifecycle {
+    ignore_changes = [
+      template[0].container[0].image,
+    ]
+  }
+
   tags = local.common_tags
 }
 
