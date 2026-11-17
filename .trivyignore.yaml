@@ -1,0 +1,26 @@
+misconfigurations:
+  - id: AZU-0012
+    paths:
+      - "bootstrap/main.tf"
+    expired_at: 2027-02-15
+    statement: >-
+      The Terraform state account remains publicly reachable for the current
+      local and Jenkins Azure AD backend workflow. Replace this with private
+      endpoint access before this exception expires.
+  - id: AZU-0047
+    paths:
+      - "environments/jenkins-swe/network.tf"
+    expired_at: 2027-02-15
+    statement: >-
+      Jenkins HTTPS is intentionally public so GitHub webhooks and browser
+      access work. SSH is restricted to the administrator CIDR.
+  - id: AZU-0013
+    paths:
+      - "environments/production/key_vault.tf"
+      - "environments/staging-swe/key_vault.tf"
+      - "environments/staging/key_vault.tf"
+    expired_at: 2027-02-15
+    statement: >-
+      Key Vault network ACL hardening requires a private endpoint design that
+      preserves Container Apps secret access. Track and complete it before
+      this exception expires.
