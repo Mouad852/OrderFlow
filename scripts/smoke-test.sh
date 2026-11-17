@@ -13,6 +13,18 @@ fi
 curl --fail-with-body --silent --show-error "${base_url}/health" | jq -e '.status == "ok"'
 curl --fail-with-body --silent --show-error "${base_url}/ready" | jq -e '.status == "ready"'
 
+if [ -n "${access_token}" ]; then
+  anonymous_status="$(
+    curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      "${base_url}/orders?limit=1&offset=0"
+  )"
+
+  if [ "${anonymous_status}" != "401" ]; then
+    echo "Expected anonymous /orders access to return 401, got ${anonymous_status}"
+    exit 1
+  fi
+fi
+
 info_response="$(
   curl --fail-with-body --silent --show-error "${base_url}/info"
 )"
