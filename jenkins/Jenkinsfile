@@ -124,6 +124,27 @@ pipeline {
             }
         }
 
+        stage('Generate API SBOM') {
+            steps {
+                sh '''
+                    rm -f sbom.cdx.json
+
+                    trivy image \
+                        --skip-version-check \
+                        --format cyclonedx \
+                        --output sbom.cdx.json \
+                        "orderflow-api:${IMAGE_TAG}"
+
+                    jq -e '
+                        .bomFormat == "CycloneDX" and
+                        (.components | type == "array")
+                    ' sbom.cdx.json > /dev/null
+
+                    echo "SBOM components: $(jq '.components | length' sbom.cdx.json)"
+                '''
+            }
+        }
+
         stage('Scan API image') {
             steps {
                 sh '''
@@ -211,6 +232,28 @@ pipeline {
 
                     echo "Immutable API image: ${env.API_IMAGE_BY_DIGEST}"
                 }
+            }
+        }
+
+        stage('Record release evidence') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                sh '''
+                    jq -n \
+                        --arg git_sha "${IMAGE_TAG}" \
+                        --arg image "${API_IMAGE_BY_DIGEST}" \
+                        --arg image_digest "${API_IMAGE_DIGEST}" \
+                        --arg build_url "${BUILD_URL}" \
+                        '{
+                            git_sha: $git_sha,
+                            image: $image,
+                            image_digest: $image_digest,
+                            build_url: $build_url
+                        }' > release-evidence.json
+                '''
             }
         }
 
@@ -836,7 +879,7 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true, testResults: 'junit.xml'
-            archiveArtifacts allowEmptyArchive: true, artifacts: 'coverage.xml'
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'coverage.xml,sbom.cdx.json,release-evidence.json'
             sh 'rm -rf "${AZURE_CONFIG_DIR}"'
         }
     }
