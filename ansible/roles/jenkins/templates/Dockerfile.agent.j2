@@ -12,7 +12,24 @@ RUN apt-get update \
         curl \
         git \
         jq \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
+
+ARG TERRAFORM_VERSION={{ jenkins_terraform_version }}
+
+RUN terraform_archive="terraform_${TERRAFORM_VERSION}_linux_amd64.zip" \
+    && curl --fail --location --silent --show-error \
+        "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/${terraform_archive}" \
+        --output "/tmp/${terraform_archive}" \
+    && curl --fail --location --silent --show-error \
+        "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" \
+        --output /tmp/terraform_SHA256SUMS \
+    && cd /tmp \
+    && grep " ${terraform_archive}$" terraform_SHA256SUMS \
+        | sha256sum --check --status \
+    && unzip -q "${terraform_archive}" -d /usr/local/bin \
+    && rm -f "${terraform_archive}" terraform_SHA256SUMS \
+    && terraform version
 
 RUN curl --fail --location --silent --show-error \
         https://aka.ms/InstallAzureCLIDeb \

@@ -12,6 +12,8 @@ jenkins_agent_base_image: jenkins/inbound-agent:3395.v6e5377b_0fb_3c-5-jdk21
 jenkins_docker_cli_image: >-
   docker:29.4.0-cli@sha256:bb21349a52c00b206ad8b5c03fa52023c741c4cf11f269d40d40b9ebaac73d96
 
+jenkins_terraform_version: "1.17.2"
+
 jenkins_agent_image: orderflow-jenkins-agent:local
 jenkins_agent_name: orderflow-azure-agent
 jenkins_agent_workdir: /home/jenkins/agent

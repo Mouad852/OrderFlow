@@ -54,6 +54,28 @@ pipeline {
             }
         }
 
+        stage('Validate Terraform') {
+            steps {
+                sh '''
+                    for directory in \
+                      terraform/bootstrap \
+                      terraform/environments/jenkins-swe \
+                      terraform/environments/staging \
+                      terraform/environments/staging-swe \
+                      terraform/environments/production; do
+                      echo "Validating ${directory}"
+
+                      terraform -chdir="${directory}" fmt -check -recursive
+                      terraform -chdir="${directory}" init \
+                        -backend=false \
+                        -input=false \
+                        -no-color
+                      terraform -chdir="${directory}" validate -no-color
+                    done
+                '''
+            }
+        }
+
         stage('Format and lint') {
             steps {
                 sh 'uv run ruff format --check .'
