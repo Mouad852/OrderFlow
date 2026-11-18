@@ -1,6 +1,6 @@
 # OrderFlow
 
-OrderFlow is a cloud-native order-management API built with FastAPI and PostgreSQL. It demonstrates a complete delivery path: tested application code, immutable container images, infrastructure as code, automated staging deployment, approval-gated production promotion, canary rollout, observability, alerting, and recovery drills.
+OrderFlow is a cloud-native order-management API built with FastAPI and PostgreSQL. It demonstrates a production-minded delivery path: tested application code, Entra ID-protected business endpoints, immutable and signed container images, infrastructure as code, automated staging deployment, approval-gated production promotion, canary rollout, observability, alerting, and tested recovery.
 
 ## Live production service
 
@@ -12,10 +12,11 @@ OrderFlow is a cloud-native order-management API built with FastAPI and PostgreS
 ## What this project demonstrates
 
 - **API engineering:** FastAPI, SQLAlchemy, PostgreSQL, Alembic migrations, validation, health checks, and automated tests.
-- **Container delivery:** Docker image builds, Trivy image scanning, Azure Container Registry, immutable SHA-256 image digests, and build identity exposed through `/info`.
+- **Container delivery:** Docker image builds, Trivy image and IaC scanning, CycloneDX SBOM generation, Azure Container Registry, immutable SHA-256 digests, and build identity exposed through `/info`.
 - **Infrastructure as code:** Terraform-managed staging, production, networking, secrets, monitoring, alerts, backups, and an Azure Monitor Workbook.
 - **Configuration management:** Ansible configures a Jenkins VM, Docker Compose stack, Caddy reverse proxy, and a Jenkins build agent.
-- **CI/CD:** GitHub webhook-triggered Jenkins pipeline with tests, image publication, migrations, staging verification, manual production approval, and canary promotion.
+- **CI/CD:** GitHub webhook-triggered Jenkins pipeline with tests, signed image publication, migrations, staging verification, manual production approval, and canary promotion.
+- **Identity and supply chain security:** Microsoft Entra ID role-based API authorization, Azure managed identities, Azure Key Vault, and Cosign image signing and verification with a Key Vault-backed key.
 - **Operations:** Application Insights OpenTelemetry instrumentation, Log Analytics, availability testing, 5xx monitoring, email alerts, cost budget alerts, and tested recovery procedures.
 
 ## Architecture
@@ -45,14 +46,25 @@ flowchart LR
 ## Delivery workflow
 
 1. A push to `main` triggers Jenkins through a GitHub webhook.
-2. Jenkins formats and lints the code, runs unit and PostgreSQL integration tests, builds the API image, and scans it with Trivy.
-3. The image is published to Azure Container Registry and resolved to an immutable digest.
-4. A Container Apps Job runs the database migration against staging.
-5. Staging deploys the same digest, waits until `/info` reports the expected Git SHA, then runs health, readiness, and order-lifecycle smoke tests.
-6. A manual approval gate protects production.
-7. Production migrations run before a zero-traffic candidate revision is created and validated.
-8. The candidate receives 10% of production traffic. The pipeline verifies that it receives live traffic, checks candidate 5xx metrics, then either promotes it to 100% or restores the previous revision.
-9. A final production smoke test and build-SHA check confirm the release.
+2. Jenkins formats and lints the code, runs unit and PostgreSQL integration tests, validates Terraform, builds the API image, and scans the image and infrastructure with Trivy.
+3. Jenkins creates a CycloneDX SBOM, publishes the image to Azure Container Registry, resolves its immutable digest, and signs it with Cosign using Azure Key Vault.
+4. Jenkins verifies the signature and provenance annotations before deploying the digest to staging.
+5. A Container Apps Job runs the database migration against staging.
+6. Staging deploys the same digest, waits until `/info` reports the expected Git SHA, then runs health, readiness, authenticated order-lifecycle, and anonymous-access rejection smoke tests.
+7. A manual approval gate protects production.
+8. Jenkins verifies the image signature again before production migration and release.
+9. Production migrations run before a zero-traffic candidate revision is created and validated.
+10. The candidate receives 10% of production traffic. The pipeline verifies that it receives live traffic, checks candidate 5xx metrics, then either promotes it to 100% or restores the previous revision.
+11. A final production smoke test and build-SHA check confirm the release.
+
+### Release evidence
+
+Every successful Jenkins release archives machine-readable evidence alongside test coverage:
+
+- `coverage.xml` — test coverage report.
+- `sbom.cdx.json` — CycloneDX software bill of materials for the built image.
+- `release-evidence.json` — image digest, source revision, Jenkins build, and signing-key reference.
+- `cosign-verify-staging.json` and `cosign-verify-production.json` — signature-verification results for the promoted artifact.
 
 ## Production observability
 
@@ -80,6 +92,8 @@ The screenshots above were captured on 17 November 2026. They show passing avail
 - Production PostgreSQL has public network access disabled and uses private networking and private DNS.
 - Application secrets, including the database URL and Application Insights connection string, are stored in Azure Key Vault.
 - Jenkins authenticates to Azure with a user-assigned managed identity rather than stored cloud credentials.
+- The `/orders` business API requires a Microsoft Entra ID bearer token containing the `OrderFlow.Orders.ReadWrite` application role; unauthenticated requests are rejected with `401`.
+- Each promoted image is signed with Cosign using an Azure Key Vault EC key and verified in the pipeline before staging and production use.
 - The Jenkins VM is protected by Azure Backup; a disk-recovery drill restored an isolated OS disk successfully.
 - PostgreSQL point-in-time recovery was tested by restoring a private temporary server, validating the `orderflow` database, and deleting the drill resources.
 - The production recovery procedure is documented in [the recovery runbook](docs/runbooks/production-recovery.md).
@@ -92,7 +106,7 @@ The screenshots above were captured on 17 November 2026. They show passing avail
 | Database | Azure Database for PostgreSQL Flexible Server, Alembic |
 | Containers | Docker, Docker Compose, Azure Container Apps, Azure Container Registry |
 | Infrastructure | Terraform, Azure Key Vault, Azure Virtual Network, Private DNS |
-| CI/CD | Jenkins, GitHub webhooks, Trivy |
+| CI/CD and supply chain | Jenkins, GitHub webhooks, Trivy, CycloneDX, Cosign, Azure Key Vault |
 | Configuration | Ansible, cloud-init, Caddy |
 | Observability | OpenTelemetry, Application Insights, Log Analytics, Azure Monitor Workbooks and Alerts |
 | Resilience | Azure Backup, PostgreSQL point-in-time restore, Azure Cost Management budget |
@@ -101,10 +115,10 @@ The screenshots above were captured on 17 November 2026. They show passing avail
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/orders` | Create a `PENDING` order. |
-| `GET` | `/orders?limit=&offset=` | List orders with pagination. |
-| `GET` | `/orders/{order_id}` | Retrieve one order. |
-| `PATCH` | `/orders/{order_id}/cancel` | Cancel a `PENDING` order. |
+| `POST` | `/orders` | Create a `PENDING` order; Entra token required in Azure. |
+| `GET` | `/orders?limit=&offset=` | List orders with pagination; Entra token required in Azure. |
+| `GET` | `/orders/{order_id}` | Retrieve one order; Entra token required in Azure. |
+| `PATCH` | `/orders/{order_id}/cancel` | Cancel a `PENDING` order; Entra token required in Azure. |
 | `GET` | `/health` | Check that the API process is alive. |
 | `GET` | `/ready` | Check that PostgreSQL is reachable. |
 | `GET` | `/info` | Report service identity, environment, and deployed Git commit. |
@@ -127,6 +141,8 @@ curl --request POST http://localhost:8000/orders \
 ```
 
 Money values are decimal strings. New orders are `PENDING`; only `PENDING` orders can be cancelled.
+
+For local development, authentication is disabled by default. Azure deployments set `AUTH_ENABLED=true`; use a valid Entra access token with the required application role when calling business endpoints.
 
 ## Run locally
 
