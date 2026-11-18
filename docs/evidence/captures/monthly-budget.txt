@@ -1,0 +1,3 @@
+Name                      MonthlyAmount    Period    Start                 End
+------------------------  ---------------  --------  --------------------  --------------------
+budget-orderflow-monthly  180.0            Monthly   2026-11-01T00:00:00Z  2028-10-31T00:00:00Z

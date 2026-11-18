@@ -98,6 +98,40 @@ The screenshots above were captured on 17 November 2026. They show passing avail
 - PostgreSQL point-in-time recovery was tested by restoring a private temporary server, validating the `orderflow` database, and deleting the drill resources.
 - The production recovery procedure is documented in [the recovery runbook](docs/runbooks/production-recovery.md).
 
+## Delivery and operational evidence
+
+The following evidence was captured from the production platform and Jenkins build `#33` on 18 November 2026. The release promotes immutable image digest `sha256:762af119…c9042f` from commit `83ed815`.
+
+| Active production release | Jenkins release evidence |
+| --- | --- |
+| ![Production revision receiving 100 percent traffic with its immutable digest and healthy build information](docs/images/evidence/production-release-state.png) | ![Successful Jenkins build with coverage, SBOM, release evidence, and staging and production signature reports](docs/images/evidence/jenkins-release-artifacts.png) |
+
+| Image signed through Azure Key Vault | Signature verified before deployment |
+| --- | --- |
+| ![Jenkins Cosign signing stage using the Azure Key Vault signing key](docs/images/evidence/cosign-image-signing.png) | ![Jenkins Cosign verification reporting validated annotations, claims, transparency-log inclusion, and public-key verification](docs/images/evidence/cosign-signature-verification.png) |
+
+| Anonymous request rejected | Managed identity request accepted |
+| --- | --- |
+| ![Anonymous request to the protected orders endpoint returns HTTP 401](docs/images/evidence/anonymous-api-401.png) | ![Jenkins managed identity obtains an Entra token and calls the protected orders endpoint with HTTP 200](docs/images/evidence/managed-identity-api-200.png) |
+
+### Progressive delivery
+
+The production rollout began with the previous revision at 90% and the candidate at 10%. After the candidate received live traffic and passed its 5xx metric gate, traffic was promoted to the candidate revision at 100%.
+
+| 90/10 traffic split | Candidate error-rate gate |
+| --- | --- |
+| ![Jenkins canary stage showing the stable revision at 90 percent and the candidate at 10 percent](docs/images/evidence/canary-traffic-split.png) | ![Jenkins canary metric check showing zero candidate 5xx requests](docs/images/evidence/canary-5xx-validation.png) |
+
+![Jenkins production promotion output showing production traffic targeting the validated candidate revision](docs/images/evidence/canary-production-promotion.png)
+
+### Backup, database, and cost controls
+
+| Jenkins backup health | Production PostgreSQL posture |
+| --- | --- |
+| ![Azure Backup reports a completed and healthy Jenkins VM recovery point](docs/images/evidence/jenkins-backup-status.png) | ![Production PostgreSQL reports Ready state, 14-day retention, and disabled public network access](docs/images/evidence/postgresql-backup-posture.png) |
+
+![Azure Cost Management budget showing the 180 dollar monthly OrderFlow budget](docs/images/evidence/monthly-budget.png)
+
 ## Technology stack
 
 | Area | Technology |

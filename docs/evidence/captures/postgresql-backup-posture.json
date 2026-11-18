@@ -1,0 +1,8 @@
+{
+  "BackupRetentionDays": 14,
+  "GeoRedundantBackup": "Disabled",
+  "HighAvailability": "Disabled",
+  "PublicNetworkAccess": "Disabled",
+  "Server": "psqlorderflowprodswellet6w",
+  "State": "Ready"
+}

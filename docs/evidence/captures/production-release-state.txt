@@ -1,0 +1,22 @@
+# Production release state
+Captured: 2026-11-18T14:34:32Z
+
+RevisionName                                   Weight
+---------------------------------------------  --------
+ca-orderflow-api-production-swe--83ed815749ac  100
+
+Revision                                       Traffic    Image                                                                                                                  Created
+---------------------------------------------  ---------  ---------------------------------------------------------------------------------------------------------------------  -------------------------
+ca-orderflow-api-production-swe--83ed815749ac  100        acrorderflowmouadswe.azurecr.io/orderflow-api@sha256:762af1197976faebd8ce7571759aac06d76ea3da403b2663ebf3711576c9042f  2026-11-17T18:40:23+00:00
+
+{
+  "service": "orderflow-api",
+  "environment": "production",
+  "build_sha": "83ed815749ace52de0e27713248ff160bd2c1ab1"
+}
+{
+  "status": "ok"
+}
+{
+  "status": "ready"
+}
