@@ -2,12 +2,11 @@
 
 OrderFlow is a cloud-native order-management API built with FastAPI and PostgreSQL. It demonstrates a production-minded delivery path: tested application code, Entra ID-protected business endpoints, immutable and signed container images, infrastructure as code, automated staging deployment, approval-gated production promotion, canary rollout, observability, alerting, and tested recovery.
 
-## Live production service
+> **Project status:** completed Azure delivery exercise. The application platform was intentionally deprovisioned after successful production validation on 18 November 2026. This repository preserves the reproducible infrastructure, CI/CD configuration, runbooks, artifacts, and captured operational evidence.
 
-- [Health check](https://ca-orderflow-api-production-swe.jollymeadow-5e459605.swedencentral.azurecontainerapps.io/health)
-- [Readiness check](https://ca-orderflow-api-production-swe.jollymeadow-5e459605.swedencentral.azurecontainerapps.io/ready)
-- [Build information](https://ca-orderflow-api-production-swe.jollymeadow-5e459605.swedencentral.azurecontainerapps.io/info)
-- [OpenAPI documentation](https://ca-orderflow-api-production-swe.jollymeadow-5e459605.swedencentral.azurecontainerapps.io/docs)
+## Verified deployment
+
+The production release was verified through `/health`, `/ready`, `/info`, protected order-lifecycle requests, and the OpenAPI interface. The screenshots and Jenkins artifacts below document the deployed environment, immutable image, authenticated API access, progressive rollout, monitoring, backup posture, and cost controls.
 
 ## What this project demonstrates
 
@@ -61,14 +60,14 @@ flowchart LR
 
 Every successful Jenkins release archives machine-readable evidence alongside test coverage:
 
-- `coverage.xml` — test coverage report.
-- `sbom.cdx.json` — CycloneDX software bill of materials for the built image.
-- `release-evidence.json` — image digest, source revision, Jenkins build, and signing-key reference.
-- `cosign-verify-staging.json` and `cosign-verify-production.json` — signature-verification results for the promoted artifact.
+- `coverage.xml` - test coverage report.
+- `sbom.cdx.json` - CycloneDX software bill of materials for the built image.
+- `release-evidence.json` - image digest, source revision, Jenkins build, and signing-key reference.
+- `cosign-verify-staging.json` and `cosign-verify-production.json` - signature-verification results for the promoted artifact.
 
-## Production observability
+## Production observability evidence
 
-The production workbook is provisioned with Terraform and presents availability, request health, latency, failed requests, PostgreSQL dependencies, and exceptions in one place.
+The Terraform-provisioned production workbook presented availability, request health, latency, failed requests, PostgreSQL dependencies, and exceptions in one place.
 
 | Availability tests | Production request traffic |
 | --- | --- |
@@ -78,7 +77,7 @@ The production workbook is provisioned with Terraform and presents availability,
 | --- | --- |
 | ![Production endpoint request summary](docs/images/observability/production-endpoints.png) | ![Production PostgreSQL dependencies](docs/images/observability/production-postgresql-dependencies.png) |
 
-The screenshots above were captured on 17 November 2026. They show passing availability probes from West Europe, 5.53k requests over the preceding 24 hours, a 0.07% request failure rate, and live PostgreSQL dependency traces. The recorded failures are expected `404` responses for browser requests to `/` and `/favicon.ico`; API health, readiness, and order endpoints remain healthy.
+The screenshots above were captured on 17 November 2026. They show passing availability probes from West Europe, 5.53k requests over the preceding 24 hours, a 0.07% request failure rate, and live PostgreSQL dependency traces. The recorded failures are expected `404` responses for browser requests to `/` and `/favicon.ico`; the health, readiness, and order endpoints were healthy during the evidence window.
 
 ### Monitoring and alerting
 
@@ -100,7 +99,7 @@ The screenshots above were captured on 17 November 2026. They show passing avail
 
 ## Delivery and operational evidence
 
-The following evidence was captured from the production platform and Jenkins build `#33` on 18 November 2026. The release promotes immutable image digest `sha256:762af119…c9042f` from commit `83ed815`.
+The following evidence was captured from the production platform and Jenkins build `#33` on 18 November 2026. The release promoted immutable image digest `sha256:762af119...c9042f` from commit `83ed815`.
 
 | Active production release | Jenkins release evidence |
 | --- | --- |
